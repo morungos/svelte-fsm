@@ -142,11 +142,13 @@ describe('a finite state machine', () => {
       assert.throws(machine.arrowFunction, TypeError);
     });
 
+    // API change here. The notification callback will be called after
+    // _enter, not before
     it('should call lifecycle actions in proper sequence', () => {
       machine.toggle();
       assert.isTrue(states.off._enter.calledBefore(states.off._exit));
       assert.isTrue(states.off._exit.calledBefore(callback));
-      assert.isTrue(callback.calledBefore(states.on._enter));
+      assert.isTrue(states.on._enter.calledBefore(callback));
     });
 
     it('should call _enter with appropirate metadata when fsm is created', () => {
@@ -249,5 +251,65 @@ describe('a finite state machine', () => {
       assert.notCalled(states.off.kick);
       assert.equal('off', state);
     });
+  });
+
+
+  describe('automatic transitions', () => {
+    let callback;
+    let unsubscribe;
+
+    beforeEach(() => {
+      callback = sinon.fake();
+      unsubscribe = machine.subscribe(callback);
+      callback.resetHistory();
+    });
+
+    afterEach(() => {
+      unsubscribe();
+    });
+
+    it('should perform an automatic transition once', () => {
+      const enterOn = sinon.fake.returns('off')
+      sinon.replace(states.on, '_enter', enterOn);
+      machine.toggle();
+
+      const expected = {
+        from: 'off',
+        to: 'on',
+        event: 'toggle',
+        args: []
+      };
+
+      assert.equal(states.on._enter.callCount, 1);
+      assert.calledWithExactly(states.on._enter, expected);
+      assert.equal(states.off._enter.callCount, 2);
+
+      assert.notCalled(callback);
+    });
+
+    it('should perform an automatic transition multiple times', () => {
+      const enterOn = sinon.fake.returns('off')
+      sinon.replace(states.on, '_enter', enterOn);
+
+      machine.toggle();
+      machine.toggle();
+      machine.toggle();
+      machine.toggle();
+
+      assert.equal(states.on._enter.callCount, 4);
+
+      const expected = {
+        from: 'off',
+        to: 'on',
+        event: 'toggle',
+        args: []
+      };
+
+      assert.equal(states.on._enter.callCount, 4);
+      assert.calledWithExactly(states.on._enter, expected);
+      assert.equal(states.off._enter.callCount, 5);
+
+      assert.notCalled(callback);
+    })
   });
 });
